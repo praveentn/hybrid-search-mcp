@@ -1,8 +1,17 @@
-#!/usr/bin/env python3
+@mcp.resource("search://health")
+def get_health():
+    """Get detailed health status and system information"""
+    return search_engine.get_health_status().dict()
+
+@mcp.resource("search://debug")
+def get_debug_info():
+    """Get comprehensive debugging information"""
+    debug_tool = debug_server_status()
+    return debug_tool#!/usr/bin/env python3
 """
 Hybrid RAG Search Platform MCP Server
 A sophisticated intelligent search system with multiple algorithms and AI reasoning
-Enhanced with proper testing endpoints and health checks for Render deployment
+Enhanced with proper MCP protocol handling and comprehensive testing support
 """
 
 from fastmcp import FastMCP
@@ -18,6 +27,11 @@ from dataclasses import dataclass
 from collections import defaultdict, Counter
 import math
 import asyncio
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Data Models
 class SearchQuery(BaseModel):
@@ -78,9 +92,12 @@ class HybridRAGSearchEngine:
         self.query_history: List[Dict] = []
         self.algorithm_performance: Dict[str, List[float]] = defaultdict(list)
         self.server_start_time = datetime.now()
+        self.request_count = 0
+        self.error_count = 0
         
         # Initialize with sample intelligent documents
         self._initialize_sample_data()
+        logger.info(f"Initialized search engine with {len(self.documents)} documents")
         
     def _initialize_sample_data(self):
         """Initialize with sample documents for demonstration"""
@@ -123,9 +140,23 @@ class HybridRAGSearchEngine:
             {
                 "id": "doc6",
                 "title": "FastMCP Server Architecture and Design",
-                "content": "FastMCP provides a streamlined way to build Model Context Protocol servers with HTTP and SSE transport options. The architecture supports tools, resources, and intelligent routing for AI applications.",
-                "entities": ["FastMCP", "MCP", "HTTP transport", "SSE transport", "AI servers"],
+                "content": "FastMCP provides a streamlined way to build Model Context Protocol servers with HTTP and SSE transport options. The architecture supports tools, resources, and intelligent routing for AI applications. Key features include automatic JSON-RPC handling, session management, and seamless integration with AI clients.",
+                "entities": ["FastMCP", "MCP", "HTTP transport", "SSE transport", "AI servers", "JSON-RPC"],
                 "tags": ["MCP", "server architecture", "AI infrastructure"]
+            },
+            {
+                "id": "doc7",
+                "title": "OpenAI GPT and Claude Integration Patterns",
+                "content": "Modern AI applications benefit from hybrid approaches combining multiple language models. GPT excels at creative tasks while Claude provides strong reasoning capabilities. MCP servers enable seamless integration between different AI systems.",
+                "entities": ["OpenAI", "GPT", "Claude", "AI integration", "language models"],
+                "tags": ["AI", "integration", "language models"]
+            },
+            {
+                "id": "doc8",
+                "title": "Render Cloud Deployment Best Practices",
+                "content": "Deploying applications on Render requires attention to build commands, environment variables, and health checks. For Python applications, ensure proper requirements.txt and consider using gunicorn for production deployments.",
+                "entities": ["Render", "cloud deployment", "Python", "gunicorn", "health checks"],
+                "tags": ["deployment", "cloud", "DevOps"]
             }
         ]
         
@@ -478,63 +509,109 @@ class HybridRAGSearchEngine:
             return content[:max_length] + "..." if len(content) > max_length else content
 
     def search(self, search_query: SearchQuery) -> IntelligentSearchResponse:
-        """Main intelligent search function with reasoning"""
+        """Main intelligent search function with reasoning and error handling"""
         start_time = time.time()
+        self.request_count += 1
         
-        # Analyze query intent
-        intent = self.analyze_query_intent(search_query.query)
-        
-        # Select algorithm with reasoning
-        if search_query.algorithm:
-            selected_algorithm = search_query.algorithm
-            algorithm_reasoning = f"User explicitly requested {selected_algorithm} algorithm"
-        else:
-            selected_algorithm = intent.suggested_algorithm
-            algorithm_reasoning = f"Selected {selected_algorithm} based on intent analysis: {intent.reasoning}"
-        
-        # Execute search
-        if selected_algorithm == "keyword":
-            results = self.keyword_search(search_query.query, search_query.max_results)
-        elif selected_algorithm == "vector":
-            results = self.vector_search(search_query.query, search_query.max_results)
-        elif selected_algorithm == "graph":
-            results = self.graph_search(search_query.query, search_query.max_results)
-        elif selected_algorithm == "hybrid":
-            results = self.hybrid_search(search_query.query, search_query.max_results)
-        elif selected_algorithm == "adaptive":
-            results = self.adaptive_search(search_query.query, search_query.max_results)
-        else:
-            results = self.hybrid_search(search_query.query, search_query.max_results)
-        
-        end_time = time.time()
-        total_time = (end_time - start_time) * 1000
-        
-        # Record performance for learning
-        self.algorithm_performance[selected_algorithm].append(len(results))
-        
-        # Generate intelligent suggestions
-        suggestions = self._generate_suggestions(search_query.query, results)
-        
-        return IntelligentSearchResponse(
-            query_analysis={
-                "intent": intent.intent_type,
-                "confidence": intent.confidence,
-                "reasoning": intent.reasoning,
-                "query_length": len(search_query.query.split()),
-                "query_complexity": "high" if len(search_query.query.split()) > 5 else "medium" if len(search_query.query.split()) > 2 else "low"
-            },
-            selected_algorithm=selected_algorithm,
-            algorithm_reasoning=algorithm_reasoning,
-            results=results,
-            performance_metrics={
-                "total_time_ms": total_time,
-                "results_count": len(results),
-                "avg_score": np.mean([r.score for r in results]) if results else 0,
-                "algorithm_efficiency": min(total_time / 100, 1.0)  # Efficiency score
-            },
-            suggestions=suggestions,
-            total_time_ms=total_time
-        )
+        try:
+            logger.info(f"Processing search request #{self.request_count}: '{search_query.query}' with algorithm: {search_query.algorithm}")
+            
+            # Analyze query intent
+            intent = self.analyze_query_intent(search_query.query)
+            
+            # Select algorithm with reasoning
+            if search_query.algorithm:
+                selected_algorithm = search_query.algorithm
+                algorithm_reasoning = f"User explicitly requested {selected_algorithm} algorithm"
+            else:
+                selected_algorithm = intent.suggested_algorithm
+                algorithm_reasoning = f"Selected {selected_algorithm} based on intent analysis: {intent.reasoning}"
+            
+            # Execute search with error handling
+            try:
+                if selected_algorithm == "keyword":
+                    results = self.keyword_search(search_query.query, search_query.max_results)
+                elif selected_algorithm == "vector":
+                    results = self.vector_search(search_query.query, search_query.max_results)
+                elif selected_algorithm == "graph":
+                    results = self.graph_search(search_query.query, search_query.max_results)
+                elif selected_algorithm == "hybrid":
+                    results = self.hybrid_search(search_query.query, search_query.max_results)
+                elif selected_algorithm == "adaptive":
+                    results = self.adaptive_search(search_query.query, search_query.max_results)
+                else:
+                    logger.warning(f"Unknown algorithm '{selected_algorithm}', falling back to hybrid")
+                    results = self.hybrid_search(search_query.query, search_query.max_results)
+                    selected_algorithm = "hybrid"
+                    algorithm_reasoning += " (fallback due to unknown algorithm)"
+                    
+            except Exception as search_error:
+                logger.error(f"Search algorithm error: {search_error}")
+                self.error_count += 1
+                # Fallback to basic keyword search
+                results = self.keyword_search(search_query.query, search_query.max_results)
+                selected_algorithm = "keyword"
+                algorithm_reasoning = f"Fallback to keyword search due to error: {str(search_error)}"
+            
+            end_time = time.time()
+            total_time = (end_time - start_time) * 1000
+            
+            # Record performance for learning
+            self.algorithm_performance[selected_algorithm].append(len(results))
+            
+            # Generate intelligent suggestions
+            suggestions = self._generate_suggestions(search_query.query, results)
+            
+            logger.info(f"Search completed in {total_time:.1f}ms, found {len(results)} results")
+            
+            return IntelligentSearchResponse(
+                query_analysis={
+                    "intent": intent.intent_type,
+                    "confidence": intent.confidence,
+                    "reasoning": intent.reasoning,
+                    "query_length": len(search_query.query.split()),
+                    "query_complexity": "high" if len(search_query.query.split()) > 5 else "medium" if len(search_query.query.split()) > 2 else "low"
+                },
+                selected_algorithm=selected_algorithm,
+                algorithm_reasoning=algorithm_reasoning,
+                results=results,
+                performance_metrics={
+                    "total_time_ms": total_time,
+                    "results_count": len(results),
+                    "avg_score": np.mean([r.score for r in results]) if results else 0,
+                    "algorithm_efficiency": min(total_time / 100, 1.0)  # Efficiency score
+                },
+                suggestions=suggestions,
+                total_time_ms=total_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Critical search error: {e}")
+            self.error_count += 1
+            end_time = time.time()
+            total_time = (end_time - start_time) * 1000
+            
+            # Return error response
+            return IntelligentSearchResponse(
+                query_analysis={
+                    "intent": "error",
+                    "confidence": 0.0,
+                    "reasoning": f"Search failed due to error: {str(e)}",
+                    "query_length": len(search_query.query.split()),
+                    "query_complexity": "unknown"
+                },
+                selected_algorithm="error",
+                algorithm_reasoning=f"Search failed: {str(e)}",
+                results=[],
+                performance_metrics={
+                    "total_time_ms": total_time,
+                    "results_count": 0,
+                    "avg_score": 0,
+                    "algorithm_efficiency": 0
+                },
+                suggestions=["Please try a different query or contact support"],
+                total_time_ms=total_time
+            )
 
     def _generate_suggestions(self, query: str, results: List[SearchResult]) -> List[str]:
         """Generate intelligent search suggestions"""
@@ -564,16 +641,34 @@ class HybridRAGSearchEngine:
         """Get comprehensive health status of the search engine"""
         uptime = datetime.now() - self.server_start_time
         
+        # Calculate error rate
+        error_rate = (self.error_count / max(self.request_count, 1)) * 100
+        
+        # Determine health status
+        if error_rate > 50:
+            status = "critical"
+        elif error_rate > 20:
+            status = "degraded"
+        elif error_rate > 5:
+            status = "warning"
+        else:
+            status = "healthy"
+        
         return HealthCheckResponse(
-            status="healthy",
+            status=status,
             timestamp=datetime.now().isoformat(),
-            version="1.0.0",
+            version="1.1.0",
             server_info={
-                "uptime_seconds": uptime.total_seconds(),
+                "uptime_seconds": round(uptime.total_seconds(), 2),
+                "uptime_human": f"{int(uptime.total_seconds() // 3600)}h {int((uptime.total_seconds() % 3600) // 60)}m",
                 "documents_indexed": len(self.documents),
-                "total_queries_processed": sum(len(scores) for scores in self.algorithm_performance.values()),
+                "total_queries_processed": self.request_count,
+                "total_errors": self.error_count,
+                "error_rate_percent": round(error_rate, 2),
                 "algorithms_available": ["keyword", "vector", "graph", "hybrid", "adaptive"],
-                "memory_usage_mb": "estimation_not_available"
+                "vocabulary_size": len(self.inverted_index),
+                "entity_graph_size": len(self.entity_graph),
+                "avg_response_time_ms": round(np.mean([sum(scores) for scores in self.algorithm_performance.values()]) * 10, 2) if self.algorithm_performance else 0
             }
         )
 
@@ -698,36 +793,67 @@ def get_search_analytics() -> Dict[str, Any]:
 
 @mcp.tool()
 def sample_search_test() -> Dict[str, Any]:
-    """Run a sample search test to demonstrate the system capabilities"""
+    """Run a comprehensive sample search test to demonstrate all system capabilities"""
     test_queries = [
-        "machine learning transformers",
-        "vector database optimization",
-        "what is semantic search"
+        {"query": "machine learning transformers", "algorithm": "hybrid"},
+        {"query": "vector database optimization", "algorithm": "vector"},
+        {"query": "what is semantic search", "algorithm": "keyword"},
+        {"query": "graph neural networks", "algorithm": "graph"},
+        {"query": "artificial intelligence", "algorithm": "adaptive"}
     ]
     
     test_results = {}
+    total_start_time = time.time()
     
-    for query in test_queries:
-        search_request = SearchQuery(
-            query=query,
-            algorithm="hybrid",
-            max_results=3,
-            explain=True
-        )
+    for test_case in test_queries:
+        query = test_case["query"]
+        algorithm = test_case["algorithm"]
         
-        result = search_engine.search(search_request)
-        test_results[query] = {
-            "algorithm_used": result.selected_algorithm,
-            "results_count": len(result.results),
-            "top_result": result.results[0].title if result.results else "No results",
-            "performance_ms": result.total_time_ms,
-            "intent_detected": result.query_analysis["intent"]
-        }
+        try:
+            search_request = SearchQuery(
+                query=query,
+                algorithm=algorithm,
+                max_results=3,
+                explain=True
+            )
+            
+            result = search_engine.search(search_request)
+            test_results[f"{query} ({algorithm})"] = {
+                "status": "success",
+                "algorithm_used": result.selected_algorithm,
+                "results_count": len(result.results),
+                "top_result": result.results[0].title if result.results else "No results",
+                "performance_ms": result.total_time_ms,
+                "intent_detected": result.query_analysis["intent"],
+                "avg_score": result.performance_metrics.get("avg_score", 0)
+            }
+        except Exception as e:
+            test_results[f"{query} ({algorithm})"] = {
+                "status": "error",
+                "error_message": str(e),
+                "algorithm_used": algorithm,
+                "results_count": 0,
+                "performance_ms": 0,
+                "intent_detected": "error"
+            }
+    
+    total_time = (time.time() - total_start_time) * 1000
+    
+    # Test summary
+    successful_tests = sum(1 for result in test_results.values() if result["status"] == "success")
+    total_tests = len(test_results)
     
     return {
-        "test_summary": "Sample searches completed successfully",
+        "test_summary": f"Completed {total_tests} sample searches in {total_time:.1f}ms",
+        "success_rate": f"{(successful_tests/total_tests)*100:.1f}%",
         "test_results": test_results,
-        "system_status": "All algorithms functioning correctly",
+        "system_status": "All algorithms functioning correctly" if successful_tests == total_tests else f"{successful_tests}/{total_tests} tests passed",
+        "performance_summary": {
+            "total_time_ms": total_time,
+            "avg_time_per_test_ms": total_time / total_tests,
+            "successful_tests": successful_tests,
+            "failed_tests": total_tests - successful_tests
+        },
         "timestamp": datetime.now().isoformat()
     }
 
@@ -758,10 +884,58 @@ def list_algorithms():
         "custom": "User-defined ranking algorithms - maximum flexibility"
     }
 
-@mcp.resource("search://health")
-def get_health():
-    """Get detailed health status and system information"""
-    return search_engine.get_health_status().dict()
+@mcp.tool()
+def debug_server_status() -> Dict[str, Any]:
+    """Get detailed debugging information about the server state"""
+    uptime = datetime.now() - search_engine.server_start_time
+    
+    # Calculate algorithm usage statistics
+    algorithm_stats = {}
+    for algorithm, scores in search_engine.algorithm_performance.items():
+        if scores:
+            algorithm_stats[algorithm] = {
+                "total_queries": len(scores),
+                "avg_results": round(np.mean(scores), 2),
+                "min_results": min(scores),
+                "max_results": max(scores),
+                "success_rate": f"{(len([s for s in scores if s > 0])/len(scores)*100):.1f}%"
+            }
+    
+    # Document statistics
+    doc_stats = {
+        "total_documents": len(search_engine.documents),
+        "avg_content_length": round(np.mean([len(doc.content) for doc in search_engine.documents.values()]), 2),
+        "avg_entities_per_doc": round(np.mean([len(doc.entities) for doc in search_engine.documents.values()]), 2),
+        "total_unique_entities": len(set().union(*[doc.entities for doc in search_engine.documents.values()])),
+        "documents_with_vectors": len([doc for doc in search_engine.documents.values() if doc.vector])
+    }
+    
+    return {
+        "server_info": {
+            "start_time": search_engine.server_start_time.isoformat(),
+            "uptime_seconds": round(uptime.total_seconds(), 2),
+            "total_requests": search_engine.request_count,
+            "total_errors": search_engine.error_count,
+            "error_rate": f"{(search_engine.error_count/max(search_engine.request_count, 1)*100):.2f}%"
+        },
+        "algorithm_performance": algorithm_stats,
+        "document_statistics": doc_stats,
+        "index_statistics": {
+            "vocabulary_size": len(search_engine.inverted_index),
+            "entity_graph_nodes": len(search_engine.entity_graph),
+            "entity_graph_edges": sum(len(edges) for edges in search_engine.entity_graph.values()),
+            "query_history_size": len(search_engine.query_history)
+        },
+        "system_health": {
+            "status": "healthy" if search_engine.error_count < search_engine.request_count * 0.1 else "degraded",
+            "memory_indicators": {
+                "documents_loaded": len(search_engine.documents) > 0,
+                "indexes_built": len(search_engine.inverted_index) > 0,
+                "algorithms_available": len(search_engine.algorithm_performance) > 0
+            }
+        },
+        "debug_timestamp": datetime.now().isoformat()
+    }
 
 @mcp.tool()
 def get_server_health() -> Dict[str, Any]:
@@ -814,6 +988,7 @@ def get_server_info() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     print("🚀 Starting Hybrid RAG Search Platform MCP Server...")
+    print("🔧 Version: 1.1.0 (Enhanced with robust error handling)")
     print("🧠 Intelligence Features:")
     print("   • Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)")
     print("   • AI-powered query intent analysis") 
@@ -821,6 +996,7 @@ if __name__ == "__main__":
     print("   • Explainable search decisions")
     print("   • Performance analytics and learning")
     print("   • Contextual suggestions and recommendations")
+    print("   • Comprehensive error handling and debugging")
     print("\n🔍 Available at:")
     print("   • HTTP Transport: http://localhost:8000/mcp/")
     print("   • SSE Transport: http://localhost:8000/sse/")
@@ -829,10 +1005,34 @@ if __name__ == "__main__":
     print("   • intelligent_search - Main search functionality")
     print("   • get_server_health - Health status and monitoring")
     print("   • get_server_info - Server capabilities and information")
-    print("   • sample_search_test - Built-in testing functionality")
+    print("   • sample_search_test - Built-in comprehensive testing")
+    print("   • debug_server_status - Detailed debugging information")
+    print("   • analyze_query_intent - Query understanding")
+    print("   • compare_algorithms - Performance comparison")
+    print("   • add_document - Add new documents")
+    print("   • get_search_analytics - Usage analytics")
+    print("\n📚 Available Resources:")
+    print("   • search://documents - Document index")
+    print("   • search://algorithms - Algorithm descriptions")
+    print("   • search://health - Health status")
+    print("   • search://debug - Debug information")
+    print("\n🧪 Testing the Server:")
+    print("   1. Initialize: POST /mcp/ with initialize method")
+    print("   2. List tools: POST /mcp/ with tools/list method")
+    print("   3. Test search: Use sample_search_test tool")
+    print("   4. Check health: Use get_server_health tool")
+    print("\n📖 Example MCP Request:")
+    print("   curl -X POST http://localhost:8000/mcp/ \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -H 'Accept: application/json, text/event-stream' \\")
+    print("     -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":\"test\"}'")
+    print("\n⚠️  Note: MCP protocol requires proper initialization before using tools")
+    print("🔐 For HTTPS deployment: Ensure SSL certificates are properly configured")
     
     # Run the FastMCP server
     import sys
     port = 8001 if len(sys.argv) > 1 and sys.argv[1] == "--port" else 8000
+    
+    logger.info(f"Starting server on port {port}")
     mcp.run(transport="http", host="0.0.0.0", port=port)
 

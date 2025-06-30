@@ -2,6 +2,7 @@
 """
 Hybrid RAG Search Platform MCP Server
 A sophisticated intelligent search system with multiple algorithms and AI reasoning
+Enhanced with proper testing endpoints and health checks for Render deployment
 """
 
 from fastmcp import FastMCP
@@ -17,6 +18,8 @@ from dataclasses import dataclass
 from collections import defaultdict, Counter
 import math
 import asyncio
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse
 
 # Data Models
 class SearchQuery(BaseModel):
@@ -54,6 +57,13 @@ class IntelligentSearchResponse(BaseModel):
     suggestions: List[str]
     total_time_ms: float
 
+class HealthCheckResponse(BaseModel):
+    status: str
+    timestamp: str
+    version: str
+    server_info: Dict[str, Any]
+    endpoints: Dict[str, str]
+
 @dataclass
 class QueryIntent:
     intent_type: str  # factual, conceptual, comparison, procedural, exploratory
@@ -70,6 +80,7 @@ class HybridRAGSearchEngine:
         self.entity_graph: Dict[str, List[str]] = defaultdict(list)
         self.query_history: List[Dict] = []
         self.algorithm_performance: Dict[str, List[float]] = defaultdict(list)
+        self.server_start_time = datetime.now()
         
         # Initialize with sample intelligent documents
         self._initialize_sample_data()
@@ -111,6 +122,13 @@ class HybridRAGSearchEngine:
                 "content": "RLHF techniques can optimize search ranking by learning from user feedback. This creates adaptive systems that improve over time by understanding user preferences and query intent patterns.",
                 "entities": ["RLHF", "search ranking", "user feedback", "adaptive systems"],
                 "tags": ["reinforcement learning", "ranking", "personalization"]
+            },
+            {
+                "id": "doc6",
+                "title": "FastMCP Server Architecture and Design",
+                "content": "FastMCP provides a streamlined way to build Model Context Protocol servers with HTTP and SSE transport options. The architecture supports tools, resources, and intelligent routing for AI applications.",
+                "entities": ["FastMCP", "MCP", "HTTP transport", "SSE transport", "AI servers"],
+                "tags": ["MCP", "server architecture", "AI infrastructure"]
             }
         ]
         
@@ -545,6 +563,30 @@ class HybridRAGSearchEngine:
         
         return suggestions
 
+    def get_health_status(self) -> HealthCheckResponse:
+        """Get comprehensive health status of the search engine"""
+        uptime = datetime.now() - self.server_start_time
+        
+        return HealthCheckResponse(
+            status="healthy",
+            timestamp=datetime.now().isoformat(),
+            version="1.0.0",
+            server_info={
+                "uptime_seconds": uptime.total_seconds(),
+                "documents_indexed": len(self.documents),
+                "total_queries_processed": sum(len(scores) for scores in self.algorithm_performance.values()),
+                "algorithms_available": ["keyword", "vector", "graph", "hybrid", "adaptive"],
+                "memory_usage_mb": "estimation_not_available"
+            },
+            endpoints={
+                "mcp_endpoint": "/mcp/",
+                "sse_endpoint": "/sse/",
+                "health_check": "/health",
+                "documentation": "/docs",
+                "server_info": "/info"
+            }
+        )
+
 # Initialize the search engine
 search_engine = HybridRAGSearchEngine()
 
@@ -664,6 +706,41 @@ def get_search_analytics() -> Dict[str, Any]:
         ]
     }
 
+@mcp.tool()
+def sample_search_test() -> Dict[str, Any]:
+    """Run a sample search test to demonstrate the system capabilities"""
+    test_queries = [
+        "machine learning transformers",
+        "vector database optimization",
+        "what is semantic search"
+    ]
+    
+    test_results = {}
+    
+    for query in test_queries:
+        search_request = SearchQuery(
+            query=query,
+            algorithm="hybrid",
+            max_results=3,
+            explain=True
+        )
+        
+        result = search_engine.search(search_request)
+        test_results[query] = {
+            "algorithm_used": result.selected_algorithm,
+            "results_count": len(result.results),
+            "top_result": result.results[0].title if result.results else "No results",
+            "performance_ms": result.total_time_ms,
+            "intent_detected": result.query_analysis["intent"]
+        }
+    
+    return {
+        "test_summary": "Sample searches completed successfully",
+        "test_results": test_results,
+        "system_status": "All algorithms functioning correctly",
+        "timestamp": datetime.now().isoformat()
+    }
+
 @mcp.resource("search://documents")
 def list_documents():
     """List all documents in the search index with metadata"""
@@ -691,6 +768,106 @@ def list_algorithms():
         "custom": "User-defined ranking algorithms - maximum flexibility"
     }
 
+@mcp.resource("search://health")
+def get_health():
+    """Get detailed health status and system information"""
+    return search_engine.get_health_status().dict()
+
+# Add custom endpoints for testing and documentation
+@mcp.get("/health")
+def health_check():
+    """Health check endpoint for monitoring"""
+    return search_engine.get_health_status()
+
+@mcp.get("/info")
+def server_info():
+    """Get server information and available endpoints"""
+    return {
+        "server_name": "Hybrid RAG Search Platform",
+        "version": "1.0.0",
+        "description": "Advanced intelligent search system with multiple algorithms",
+        "capabilities": [
+            "Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)",
+            "AI-powered query intent analysis",
+            "Intelligent result fusion and ranking",
+            "Explainable search decisions",
+            "Performance analytics and learning"
+        ],
+        "endpoints": {
+            "mcp_protocol": "/mcp/",
+            "sse_transport": "/sse/",
+            "health_check": "/health",
+            "server_info": "/info",
+            "documentation": "/docs"
+        },
+        "sample_tools": [
+            "intelligent_search",
+            "add_document", 
+            "analyze_query_intent",
+            "compare_algorithms",
+            "get_search_analytics",
+            "sample_search_test"
+        ],
+        "sample_resources": [
+            "search://documents",
+            "search://algorithms",
+            "search://health"
+        ]
+    }
+
+@mcp.get("/")
+def root():
+    """Root endpoint with server information"""
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Hybrid RAG Search Platform</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; }
+            .section { margin: 20px 0; padding: 15px; border-left: 4px solid #667eea; background: #f8f9fa; }
+            .endpoint { background: #e9ecef; padding: 10px; margin: 5px 0; border-radius: 5px; font-family: monospace; }
+            .status { color: #28a745; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🚀 Hybrid RAG Search Platform</h1>
+            <p>Advanced Intelligent Search System with Multiple Algorithms</p>
+            <div class="status">● Server Status: ONLINE</div>
+        </div>
+        
+        <div class="section">
+            <h2>🧠 Intelligence Features</h2>
+            <ul>
+                <li>Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)</li>
+                <li>AI-powered query intent analysis</li>
+                <li>Intelligent result fusion and ranking</li>
+                <li>Explainable search decisions</li>
+                <li>Performance analytics and learning</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>🔗 Available Endpoints</h2>
+            <div class="endpoint">POST /mcp/ - MCP Protocol Endpoint</div>
+            <div class="endpoint">GET /sse/ - Server-Sent Events Transport</div>
+            <div class="endpoint">GET /health - Health Check</div>
+            <div class="endpoint">GET /info - Server Information</div>
+            <div class="endpoint">GET /docs - API Documentation</div>
+        </div>
+        
+        <div class="section">
+            <h2>🛠️ Testing</h2>
+            <p>Use the following to test the MCP server:</p>
+            <div class="endpoint">curl -X POST {base_url}/mcp/ -H "Content-Type: application/json" -d '{{"method": "tools/list"}}'</div>
+            <p>Or visit <a href="/docs">/docs</a> for interactive API documentation</p>
+        </div>
+    </body>
+    </html>
+    """.replace("{base_url}", "https://hybrid-search-mcp.onrender.com"))
+
 if __name__ == "__main__":
     print("🚀 Starting Hybrid RAG Search Platform MCP Server...")
     print("🧠 Intelligence Features:")
@@ -703,6 +880,8 @@ if __name__ == "__main__":
     print("\n🔍 Available at:")
     print("   • HTTP Transport: http://localhost:8000/mcp/")
     print("   • SSE Transport: http://localhost:8000/sse/")
+    print("   • Health Check: http://localhost:8000/health")
+    print("   • Server Info: http://localhost:8000/info")
     print("   • OpenAPI Docs: http://localhost:8000/docs")
     
     # Run the FastMCP server

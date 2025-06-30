@@ -1,13 +1,4 @@
-@mcp.resource("search://health")
-def get_health():
-    """Get detailed health status and system information"""
-    return search_engine.get_health_status().dict()
-
-@mcp.resource("search://debug")
-def get_debug_info():
-    """Get comprehensive debugging information"""
-    debug_tool = debug_server_status()
-    return debug_tool#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Hybrid RAG Search Platform MCP Server
 A sophisticated intelligent search system with multiple algorithms and AI reasoning
@@ -857,31 +848,55 @@ def sample_search_test() -> Dict[str, Any]:
         "timestamp": datetime.now().isoformat()
     }
 
-@mcp.resource("search://documents")
-def list_documents():
-    """List all documents in the search index with metadata"""
-    return [
-        {
-            "id": doc.id,
-            "title": doc.title,
-            "content_length": len(doc.content),
-            "entities": doc.entities,
-            "tags": doc.tags,
-            "has_vector": doc.vector is not None
-        }
-        for doc in search_engine.documents.values()
-    ]
+@mcp.tool()
+def get_server_health() -> Dict[str, Any]:
+    """Get comprehensive health status and server information for monitoring"""
+    health_status = search_engine.get_health_status()
+    return health_status.dict()
 
-@mcp.resource("search://algorithms")  
-def list_algorithms():
-    """List available search algorithms with descriptions"""
+@mcp.tool()
+def get_server_info() -> Dict[str, Any]:
+    """Get detailed server information, capabilities, and available endpoints"""
     return {
-        "keyword": "TF-IDF based lexical matching - fast and precise for exact terms",
-        "vector": "Semantic similarity using embeddings - best for conceptual queries",
-        "graph": "Entity relationship search - ideal for knowledge graph queries", 
-        "hybrid": "Intelligent fusion of multiple algorithms - balanced performance",
-        "adaptive": "AI-powered algorithm selection - learns from usage patterns",
-        "custom": "User-defined ranking algorithms - maximum flexibility"
+        "server_name": "Hybrid RAG Search Platform",
+        "version": "1.1.0",
+        "description": "Advanced intelligent search system with multiple algorithms",
+        "capabilities": [
+            "Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)",
+            "AI-powered query intent analysis",
+            "Intelligent result fusion and ranking",
+            "Explainable search decisions",
+            "Performance analytics and learning"
+        ],
+        "endpoints": {
+            "mcp_protocol": "/mcp/",
+            "sse_transport": "/sse/",
+            "documentation": "/docs"
+        },
+        "available_tools": [
+            "intelligent_search",
+            "add_document", 
+            "analyze_query_intent",
+            "compare_algorithms",
+            "get_search_analytics",
+            "sample_search_test",
+            "get_server_health",
+            "get_server_info",
+            "debug_server_status"
+        ],
+        "available_resources": [
+            "search://documents",
+            "search://algorithms",
+            "search://health",
+            "search://debug"
+        ],
+        "supported_algorithms": {
+            "keyword": "TF-IDF based lexical matching - fast and precise for exact terms",
+            "vector": "Semantic similarity using embeddings - best for conceptual queries",
+            "graph": "Entity relationship search - ideal for knowledge graph queries", 
+            "hybrid": "Intelligent fusion of multiple algorithms - balanced performance",
+            "adaptive": "AI-powered algorithm selection - learns from usage patterns"
+        }
     }
 
 @mcp.tool()
@@ -937,54 +952,43 @@ def debug_server_status() -> Dict[str, Any]:
         "debug_timestamp": datetime.now().isoformat()
     }
 
-@mcp.tool()
-def get_server_health() -> Dict[str, Any]:
-    """Get comprehensive health status and server information for monitoring"""
-    health_status = search_engine.get_health_status()
-    return health_status.dict()
-
-@mcp.tool()
-def get_server_info() -> Dict[str, Any]:
-    """Get detailed server information, capabilities, and available endpoints"""
-    return {
-        "server_name": "Hybrid RAG Search Platform",
-        "version": "1.0.0",
-        "description": "Advanced intelligent search system with multiple algorithms",
-        "capabilities": [
-            "Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)",
-            "AI-powered query intent analysis",
-            "Intelligent result fusion and ranking",
-            "Explainable search decisions",
-            "Performance analytics and learning"
-        ],
-        "endpoints": {
-            "mcp_protocol": "/mcp/",
-            "sse_transport": "/sse/",
-            "documentation": "/docs"
-        },
-        "available_tools": [
-            "intelligent_search",
-            "add_document", 
-            "analyze_query_intent",
-            "compare_algorithms",
-            "get_search_analytics",
-            "sample_search_test",
-            "get_server_health",
-            "get_server_info"
-        ],
-        "available_resources": [
-            "search://documents",
-            "search://algorithms",
-            "search://health"
-        ],
-        "supported_algorithms": {
-            "keyword": "TF-IDF based lexical matching - fast and precise for exact terms",
-            "vector": "Semantic similarity using embeddings - best for conceptual queries",
-            "graph": "Entity relationship search - ideal for knowledge graph queries", 
-            "hybrid": "Intelligent fusion of multiple algorithms - balanced performance",
-            "adaptive": "AI-powered algorithm selection - learns from usage patterns"
+@mcp.resource("search://documents")
+def list_documents():
+    """List all documents in the search index with metadata"""
+    return [
+        {
+            "id": doc.id,
+            "title": doc.title,
+            "content_length": len(doc.content),
+            "entities": doc.entities,
+            "tags": doc.tags,
+            "has_vector": doc.vector is not None
         }
+        for doc in search_engine.documents.values()
+    ]
+
+@mcp.resource("search://algorithms")  
+def list_algorithms():
+    """List available search algorithms with descriptions"""
+    return {
+        "keyword": "TF-IDF based lexical matching - fast and precise for exact terms",
+        "vector": "Semantic similarity using embeddings - best for conceptual queries",
+        "graph": "Entity relationship search - ideal for knowledge graph queries", 
+        "hybrid": "Intelligent fusion of multiple algorithms - balanced performance",
+        "adaptive": "AI-powered algorithm selection - learns from usage patterns",
+        "custom": "User-defined ranking algorithms - maximum flexibility"
     }
+
+@mcp.resource("search://health")
+def get_health():
+    """Get detailed health status and system information"""
+    return search_engine.get_health_status().dict()
+
+@mcp.resource("search://debug")
+def get_debug_info():
+    """Get comprehensive debugging information"""
+    debug_tool = debug_server_status()
+    return debug_tool
 
 if __name__ == "__main__":
     print("🚀 Starting Hybrid RAG Search Platform MCP Server...")
@@ -1035,4 +1039,3 @@ if __name__ == "__main__":
     
     logger.info(f"Starting server on port {port}")
     mcp.run(transport="http", host="0.0.0.0", port=port)
-

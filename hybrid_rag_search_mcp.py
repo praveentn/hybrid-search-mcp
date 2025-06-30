@@ -18,8 +18,6 @@ from dataclasses import dataclass
 from collections import defaultdict, Counter
 import math
 import asyncio
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
 
 # Data Models
 class SearchQuery(BaseModel):
@@ -62,7 +60,6 @@ class HealthCheckResponse(BaseModel):
     timestamp: str
     version: str
     server_info: Dict[str, Any]
-    endpoints: Dict[str, str]
 
 @dataclass
 class QueryIntent:
@@ -577,13 +574,6 @@ class HybridRAGSearchEngine:
                 "total_queries_processed": sum(len(scores) for scores in self.algorithm_performance.values()),
                 "algorithms_available": ["keyword", "vector", "graph", "hybrid", "adaptive"],
                 "memory_usage_mb": "estimation_not_available"
-            },
-            endpoints={
-                "mcp_endpoint": "/mcp/",
-                "sse_endpoint": "/sse/",
-                "health_check": "/health",
-                "documentation": "/docs",
-                "server_info": "/info"
             }
         )
 
@@ -773,15 +763,15 @@ def get_health():
     """Get detailed health status and system information"""
     return search_engine.get_health_status().dict()
 
-# Add custom endpoints for testing and documentation
-@mcp.get("/health")
-def health_check():
-    """Health check endpoint for monitoring"""
-    return search_engine.get_health_status()
+@mcp.tool()
+def get_server_health() -> Dict[str, Any]:
+    """Get comprehensive health status and server information for monitoring"""
+    health_status = search_engine.get_health_status()
+    return health_status.dict()
 
-@mcp.get("/info")
-def server_info():
-    """Get server information and available endpoints"""
+@mcp.tool()
+def get_server_info() -> Dict[str, Any]:
+    """Get detailed server information, capabilities, and available endpoints"""
     return {
         "server_name": "Hybrid RAG Search Platform",
         "version": "1.0.0",
@@ -796,77 +786,31 @@ def server_info():
         "endpoints": {
             "mcp_protocol": "/mcp/",
             "sse_transport": "/sse/",
-            "health_check": "/health",
-            "server_info": "/info",
             "documentation": "/docs"
         },
-        "sample_tools": [
+        "available_tools": [
             "intelligent_search",
             "add_document", 
             "analyze_query_intent",
             "compare_algorithms",
             "get_search_analytics",
-            "sample_search_test"
+            "sample_search_test",
+            "get_server_health",
+            "get_server_info"
         ],
-        "sample_resources": [
+        "available_resources": [
             "search://documents",
             "search://algorithms",
             "search://health"
-        ]
+        ],
+        "supported_algorithms": {
+            "keyword": "TF-IDF based lexical matching - fast and precise for exact terms",
+            "vector": "Semantic similarity using embeddings - best for conceptual queries",
+            "graph": "Entity relationship search - ideal for knowledge graph queries", 
+            "hybrid": "Intelligent fusion of multiple algorithms - balanced performance",
+            "adaptive": "AI-powered algorithm selection - learns from usage patterns"
+        }
     }
-
-@mcp.get("/")
-def root():
-    """Root endpoint with server information"""
-    return HTMLResponse(content="""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Hybrid RAG Search Platform</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; }
-            .section { margin: 20px 0; padding: 15px; border-left: 4px solid #667eea; background: #f8f9fa; }
-            .endpoint { background: #e9ecef; padding: 10px; margin: 5px 0; border-radius: 5px; font-family: monospace; }
-            .status { color: #28a745; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>🚀 Hybrid RAG Search Platform</h1>
-            <p>Advanced Intelligent Search System with Multiple Algorithms</p>
-            <div class="status">● Server Status: ONLINE</div>
-        </div>
-        
-        <div class="section">
-            <h2>🧠 Intelligence Features</h2>
-            <ul>
-                <li>Multi-algorithm search (keyword, vector, graph, hybrid, adaptive)</li>
-                <li>AI-powered query intent analysis</li>
-                <li>Intelligent result fusion and ranking</li>
-                <li>Explainable search decisions</li>
-                <li>Performance analytics and learning</li>
-            </ul>
-        </div>
-        
-        <div class="section">
-            <h2>🔗 Available Endpoints</h2>
-            <div class="endpoint">POST /mcp/ - MCP Protocol Endpoint</div>
-            <div class="endpoint">GET /sse/ - Server-Sent Events Transport</div>
-            <div class="endpoint">GET /health - Health Check</div>
-            <div class="endpoint">GET /info - Server Information</div>
-            <div class="endpoint">GET /docs - API Documentation</div>
-        </div>
-        
-        <div class="section">
-            <h2>🛠️ Testing</h2>
-            <p>Use the following to test the MCP server:</p>
-            <div class="endpoint">curl -X POST {base_url}/mcp/ -H "Content-Type: application/json" -d '{{"method": "tools/list"}}'</div>
-            <p>Or visit <a href="/docs">/docs</a> for interactive API documentation</p>
-        </div>
-    </body>
-    </html>
-    """.replace("{base_url}", "https://hybrid-search-mcp.onrender.com"))
 
 if __name__ == "__main__":
     print("🚀 Starting Hybrid RAG Search Platform MCP Server...")
@@ -880,9 +824,12 @@ if __name__ == "__main__":
     print("\n🔍 Available at:")
     print("   • HTTP Transport: http://localhost:8000/mcp/")
     print("   • SSE Transport: http://localhost:8000/sse/")
-    print("   • Health Check: http://localhost:8000/health")
-    print("   • Server Info: http://localhost:8000/info")
     print("   • OpenAPI Docs: http://localhost:8000/docs")
+    print("\n🛠️ Available Tools:")
+    print("   • intelligent_search - Main search functionality")
+    print("   • get_server_health - Health status and monitoring")
+    print("   • get_server_info - Server capabilities and information")
+    print("   • sample_search_test - Built-in testing functionality")
     
     # Run the FastMCP server
     import sys

@@ -1,4 +1,5 @@
 # app.py
+# app.py
 import json
 import logging
 import os
@@ -20,6 +21,14 @@ MCP_SERVER_INFO = {
     "description": "An MCP server that provides funny one-liners for Indian and Kerala names",
     "author": "FastMCP Developer",
     "license": "MIT"
+}
+
+# Server capabilities
+MCP_CAPABILITIES = {
+    "tools": {},
+    "resources": {},
+    "prompts": {},
+    "logging": {}
 }
 
 # Available tools
@@ -49,18 +58,16 @@ TOOLS = [
     }
 ]
 
-def create_mcp_response(tools=None, resources=None, result=None, error=None):
+def create_mcp_response(request_id=1, tools=None, resources=None, result=None, error=None):
     """Create a standard MCP response"""
     response = {
         "jsonrpc": "2.0",
-        "id": 1
+        "id": request_id
     }
     
     if tools is not None:
         response["result"] = {
-            "capabilities": {
-                "tools": {}
-            },
+            "capabilities": MCP_CAPABILITIES,
             "serverInfo": MCP_SERVER_INFO,
             "tools": tools
         }
@@ -70,6 +77,18 @@ def create_mcp_response(tools=None, resources=None, result=None, error=None):
         response["error"] = error
     
     return response
+
+def create_initialize_response(request_id=1):
+    """Create MCP initialize response"""
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "result": {
+            "capabilities": MCP_CAPABILITIES,
+            "serverInfo": MCP_SERVER_INFO,
+            "protocolVersion": "2024-11-05"
+        }
+    }
 
 def stream_json_response(data):
     """Stream JSON response as required by MCP protocol"""
@@ -90,21 +109,43 @@ def mcp_endpoint():
             response = create_mcp_response(tools=TOOLS)
             return stream_json_response(response)
         
-        # Handle tool invocations
+        # Extract request details
         method = request_data.get('method')
         params = request_data.get('params', {})
+        request_id = request_data.get('id', 1)
         
-        if method == 'tools/call':
+        # Handle MCP initialize method
+        if method == 'initialize':
+            logger.info("Handling MCP initialize request")
+            response = create_initialize_response(request_id)
+            return stream_json_response(response)
+        
+        # Handle notifications/initialized (no response needed)
+        elif method == 'notifications/initialized':
+            logger.info("Client initialized notification received")
+            # For notifications, we don't send a response
+            return Response('', status=204)
+        
+        # Handle tool listing
+        elif method == 'tools/list':
+            response = create_mcp_response(request_id=request_id, tools=TOOLS)
+            return stream_json_response(response)
+        
+        # Handle tool invocations
+        elif method == 'tools/call':
             tool_name = params.get('name')
             tool_arguments = params.get('arguments', {})
             
             if tool_name == 'get_funny_oneliner':
                 name = tool_arguments.get('name', '').strip()
                 if not name:
-                    error_response = create_mcp_response(error={
-                        "code": -1,
-                        "message": "Name parameter is required"
-                    })
+                    error_response = create_mcp_response(
+                        request_id=request_id,
+                        error={
+                            "code": -32602,
+                            "message": "Name parameter is required"
+                        }
+                    )
                     return stream_json_response(error_response)
                 
                 oneliner = get_oneliner(name)
@@ -116,7 +157,7 @@ def mcp_endpoint():
                         }
                     ]
                 }
-                response = create_mcp_response(result=result)
+                response = create_mcp_response(request_id=request_id, result=result)
                 return stream_json_response(response)
             
             elif tool_name == 'list_available_names':
@@ -130,33 +171,38 @@ def mcp_endpoint():
                         }
                     ]
                 }
-                response = create_mcp_response(result=result)
+                response = create_mcp_response(request_id=request_id, result=result)
                 return stream_json_response(response)
             
             else:
-                error_response = create_mcp_response(error={
-                    "code": -2,
-                    "message": f"Unknown tool: {tool_name}"
-                })
+                error_response = create_mcp_response(
+                    request_id=request_id,
+                    error={
+                        "code": -32601,
+                        "message": f"Unknown tool: {tool_name}"
+                    }
+                )
                 return stream_json_response(error_response)
         
-        elif method == 'tools/list':
-            response = create_mcp_response(tools=TOOLS)
-            return stream_json_response(response)
-        
         else:
-            error_response = create_mcp_response(error={
-                "code": -3,
-                "message": f"Unknown method: {method}"
-            })
+            error_response = create_mcp_response(
+                request_id=request_id,
+                error={
+                    "code": -32601,
+                    "message": f"Unknown method: {method}"
+                }
+            )
             return stream_json_response(error_response)
             
     except Exception as e:
         logger.error(f"Error in MCP endpoint: {str(e)}")
-        error_response = create_mcp_response(error={
-            "code": -4,
-            "message": f"Internal server error: {str(e)}"
-        })
+        error_response = create_mcp_response(
+            request_id=request_data.get('id', 1) if request_data else 1,
+            error={
+                "code": -32603,
+                "message": f"Internal server error: {str(e)}"
+            }
+        )
         return stream_json_response(error_response)
 
 @app.route('/health')
@@ -302,6 +348,24 @@ WEB_INTERFACE_HTML = '''
         <div class="section">
             <h2>🛠️ Test MCP Protocol</h2>
             <p>Use these JSON payloads to test the MCP endpoints:</p>
+            <h3>Initialize MCP Connection:</h3>
+            <pre style="background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 5px; overflow-x: auto;">POST {{ base_url }}/mcp/
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "test-client",
+      "version": "1.0.0"
+    }
+  }
+}</pre>
+            
             <h3>Get Server Info & Tools:</h3>
             <pre style="background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 5px; overflow-x: auto;">POST {{ base_url }}/mcp/
 Content-Type: application/json
@@ -409,7 +473,7 @@ Content-Type: application/json
             if (e.key === 'Enter') {
                 getOneLiner();
             }
-        });
+        }); 
     </script>
 </body>
 </html>

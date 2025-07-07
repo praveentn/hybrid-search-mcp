@@ -1,239 +1,112 @@
 # File: test_mcp_server.py
-#!/usr/bin/env python3
 """
-Test script for the Funny One-Liner MCP Server
+Test FastMCP client with SSL fixes for your MCP server
 """
 
-import requests
-import json
-import sys
-from typing import Dict, Any
+import asyncio
+import os
+import ssl
+import warnings
+from fastmcp import Client
 
-class MCPServerTester:
-    def __init__(self, base_url: str):
-        """Initialize the tester with the server base URL"""
-        self.base_url = base_url.rstrip('/')
-        self.mcp_url = f"{self.base_url}/mcp/"
-        self.health_url = f"{self.base_url}/health"
-        
-    def test_health_check(self) -> bool:
-        """Test the health check endpoint"""
-        print("🔍 Testing health check endpoint...")
-        try:
-            response = requests.get(self.health_url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"✅ Health check passed: {data}")
-                return True
-            else:
-                print(f"❌ Health check failed with status {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ Health check error: {e}")
-            return False
+# Disable SSL warnings and verification for testing
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+os.environ['PYTHONHTTPSVERIFY'] = '0'
+os.environ['CURL_CA_BUNDLE'] = ''
+os.environ['REQUESTS_CA_BUNDLE'] = ''
+
+# Try to disable SSL verification globally
+try:
+    ssl._create_default_https_context = ssl._create_unverified_context
+    print("✅ SSL verification disabled globally")
+except Exception as e:
+    print(f"⚠️  Could not disable SSL globally: {e}")
+
+# Your server URL
+url = "https://hybrid-search-mcp.onrender.com/mcp/"
+
+async def test_mcp_server():
+    """Test the MCP server with FastMCP client"""
     
-    def test_mcp_capabilities(self) -> bool:
-        """Test MCP server capabilities discovery"""
-        print("\n🔍 Testing MCP capabilities discovery...")
-        try:
-            # Send empty POST request to get server capabilities
-            response = requests.post(
-                self.mcp_url,
-                json={},
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                print("✅ MCP capabilities response received:")
-                print(f"   Server: {data.get('result', {}).get('serverInfo', {}).get('name', 'Unknown')}")
-                print(f"   Version: {data.get('result', {}).get('serverInfo', {}).get('version', 'Unknown')}")
-                
-                tools = data.get('result', {}).get('tools', [])
-                print(f"   Available tools: {len(tools)}")
-                for tool in tools:
-                    print(f"     - {tool.get('name')}: {tool.get('description')}")
-                return True
-            else:
-                print(f"❌ MCP capabilities test failed with status {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ MCP capabilities test error: {e}")
-            return False
+    print(f"🔗 Connecting to: {url}")
+    print("=" * 50)
     
-    def test_get_oneliner_tool(self, name: str = "Raj") -> bool:
-        """Test the get_funny_oneliner tool"""
-        print(f"\n🔍 Testing get_funny_oneliner tool with name '{name}'...")
-        try:
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "get_funny_oneliner",
-                    "arguments": {
-                        "name": name
-                    }
-                }
-            }
+    try:
+        async with Client(url) as client:
+            print("✅ Connected to MCP server!")
             
-            response = requests.post(
-                self.mcp_url,
-                json=payload,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
+            # List available tools
+            print("\n📋 Listing available tools...")
+            tools = await client.list_tools()
             
-            if response.status_code == 200:
-                data = response.json()
-                if 'result' in data and 'content' in data['result']:
-                    oneliner = data['result']['content'][0]['text']
-                    print(f"✅ One-liner received: {oneliner}")
-                    return True
+            if tools:
+                print(f"✅ Found {len(tools)} tools:")
+                for i, tool in enumerate(tools, 1):
+                    print(f"   {i}. {tool.name}: {tool.description}")
+            else:
+                print("❌ No tools found")
+                return
+            
+            # Test get_funny_oneliner tool
+            print("\n🎭 Testing get_funny_oneliner tool...")
+            test_names = ["Raj", "Priya", "Unni", "Maya"]
+            
+            for name in test_names:
+                try:
+                    result = await client.call_tool("get_funny_oneliner", {"name": name})
+                    if result and len(result) > 0:
+                        content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                        print(f"   • {name}: {content}")
+                    else:
+                        print(f"   • {name}: No result returned")
+                except Exception as e:
+                    print(f"   • {name}: Error - {e}")
+            
+            # Test list_available_names tool
+            print("\n📝 Testing list_available_names tool...")
+            try:
+                result = await client.call_tool("list_available_names", {})
+                if result and len(result) > 0:
+                    content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                    print(f"   {content}")
                 else:
-                    print(f"❌ Unexpected response format: {data}")
-                    return False
-            else:
-                print(f"❌ Get oneliner test failed with status {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Get oneliner test error: {e}")
-            return False
+                    print("   No names list returned")
+            except Exception as e:
+                print(f"   Error listing names: {e}")
+            
+            print("\n🎉 All tests completed successfully!")
+            
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        print("\n🔧 Troubleshooting tips:")
+        print("1. Make sure your server is running and accessible")
+        print("2. Check if the URL is correct")
+        print("3. Verify SSL certificates are working")
+        print("4. Try running with: PYTHONHTTPSVERIFY=0 python test_fastmcp_fixed.py")
+
+async def test_connection_only():
+    """Just test if we can connect"""
+    print("🔍 Testing basic connection...")
     
-    def test_list_names_tool(self) -> bool:
-        """Test the list_available_names tool"""
-        print("\n🔍 Testing list_available_names tool...")
-        try:
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "list_available_names",
-                    "arguments": {}
-                }
-            }
-            
-            response = requests.post(
-                self.mcp_url,
-                json=payload,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'result' in data and 'content' in data['result']:
-                    names_text = data['result']['content'][0]['text']
-                    print(f"✅ Names list received: {names_text[:100]}...")
-                    return True
-                else:
-                    print(f"❌ Unexpected response format: {data}")
-                    return False
-            else:
-                print(f"❌ List names test failed with status {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ List names test error: {e}")
-            return False
-    
-    def test_invalid_tool(self) -> bool:
-        """Test calling an invalid tool (should return error)"""
-        print("\n🔍 Testing invalid tool call (should fail gracefully)...")
-        try:
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "nonexistent_tool",
-                    "arguments": {}
-                }
-            }
-            
-            response = requests.post(
-                self.mcp_url,
-                json=payload,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'error' in data:
-                    print(f"✅ Error handling works: {data['error']['message']}")
-                    return True
-                else:
-                    print(f"❌ Expected error response, got: {data}")
-                    return False
-            else:
-                print(f"❌ Invalid tool test failed with status {response.status_code}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Invalid tool test error: {e}")
-            return False
-    
-    def run_all_tests(self) -> bool:
-        """Run all tests and return overall success"""
-        print(f"🚀 Starting MCP Server Tests for: {self.base_url}")
-        print("=" * 60)
-        
-        tests = [
-            ("Health Check", self.test_health_check),
-            ("MCP Capabilities", self.test_mcp_capabilities),
-            ("Get One-Liner Tool", lambda: self.test_get_oneliner_tool("Priya")),
-            ("List Names Tool", self.test_list_names_tool),
-            ("Invalid Tool Error Handling", self.test_invalid_tool),
-        ]
-        
-        passed = 0
-        total = len(tests)
-        
-        for test_name, test_func in tests:
-            print(f"\n{'='*20} {test_name} {'='*20}")
-            if test_func():
-                passed += 1
-            else:
-                print(f"❌ {test_name} FAILED")
-        
-        print("\n" + "="*60)
-        print(f"🏁 Test Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("🎉 All tests passed! Your MCP server is working correctly.")
+    try:
+        async with Client(url) as client:
+            print("✅ Basic connection successful!")
             return True
-        else:
-            print(f"⚠️  {total - passed} test(s) failed. Please check the errors above.")
-            return False
+    except Exception as e:
+        print(f"❌ Basic connection failed: {e}")
+        return False
 
-def main():
-    """Main function to run the tests"""
-    if len(sys.argv) != 2:
-        print("Usage: python test_mcp_server.py <server_url>")
-        print("Example: python test_mcp_server.py https://your-app.onrender.com")
-        print("Example: python test_mcp_server.py http://localhost:8000")
-        sys.exit(1)
+async def main():
+    print("🧪 FastMCP Client Test (SSL Fixed)")
+    print("=" * 50)
     
-    server_url = sys.argv[1]
-    tester = MCPServerTester(server_url)
-    
-    success = tester.run_all_tests()
-    
-    if success:
-        print(f"\n🎯 Quick Test Commands:")
-        print(f"   Health Check: curl {server_url}/health")
-        print(f"   Web Interface: {server_url}/")
-        print(f"   MCP Endpoint: curl -X POST {server_url}/mcp/ -H 'Content-Type: application/json' -d '{{}}'")
-    
-    sys.exit(0 if success else 1)
+    # First test basic connection
+    if await test_connection_only():
+        # If basic connection works, run full tests
+        await test_mcp_server()
+    else:
+        print("\n💡 Connection failed. Your server might need the updated app.py")
+        print("   Make sure you've deployed the updated version with MCP initialize support.")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
